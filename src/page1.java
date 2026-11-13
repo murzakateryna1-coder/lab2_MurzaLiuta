@@ -51,3 +51,5 @@ public class game1  extends GraphicsProgram {
         addText("Хрестики-нулики", 300, 225, 45);
         addButton("Почати", 200, 375, 200, 70);
     }
+}
+
