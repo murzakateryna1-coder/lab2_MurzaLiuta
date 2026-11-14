@@ -1,4 +1,3 @@
-
 import acm.graphics.*;
 import acm.program.*;
 import acm.util.*;
@@ -267,3 +266,5 @@ public class breakout extends GraphicsProgram {
         return obj;
     }
 }
+
+
