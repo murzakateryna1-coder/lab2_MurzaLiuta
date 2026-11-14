@@ -51,9 +51,47 @@ public class breakout extends GraphicsProgram {
     /* Method: run() */
     /** Runs the Breakout program. */
     public void run() {
-        /* You fill this in, along with any subsidiary methods */
+        setupBricks();
+    }
 
+    /** Створює ряди цеглин по центру вікна. */
+    private void setupBricks() {
+        // загальна ширина одного ряду цеглин разом з проміжками
+        int rowWidth = NBRICKS_PER_ROW * BRICK_WIDTH + (NBRICKS_PER_ROW - 1) * BRICK_SEP;
+
+        // x першої цеглини, щоб весь ряд стояв по центру вікна
+        int startX = (WIDTH - rowWidth) / 2;
+
+        for (int row = 0; row < NBRICK_ROWS; row++) {
+            for (int col = 0; col < NBRICKS_PER_ROW; col++) {
+
+                int x = startX + col * (BRICK_WIDTH + BRICK_SEP);
+                int y = BRICK_Y_OFFSET + row * (BRICK_HEIGHT + BRICK_SEP);
+
+                GRect brick = new GRect(x, y, BRICK_WIDTH, BRICK_HEIGHT);
+                brick.setFilled(true);
+
+                // колір залежить від номера ряду (по два ряди кожного кольору)
+                if (row < 2) {
+                    brick.setColor(Color.RED);
+                } else if (row < 4) {
+                    brick.setColor(Color.ORANGE);
+                } else if (row < 6) {
+                    brick.setColor(Color.YELLOW);
+                } else if (row < 8) {
+                    brick.setColor(Color.GREEN);
+                } else {
+                    brick.setColor(Color.CYAN);
+                }
+
+                add(brick);
+            }
+        }
     }
 
 }
+
+
+
+
 
