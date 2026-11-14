@@ -49,6 +49,9 @@ public class breakout extends GraphicsProgram {
     /** Number of turns */
     private static final int NTURNS = 3;
 
+    /** Пауза між кроками м'яча в мілісекундах (менше = швидша гра) */
+    private static final int PAUSE_TIME = 10;
+
     /** Ракетка (змінна класу, щоб її бачили всі методи) */
     private GRect paddle;
 
@@ -57,6 +60,9 @@ public class breakout extends GraphicsProgram {
 
     /** Швидкість м'яча: зміна позиції за один крок */
     private double vx, vy;
+
+    /** Скільки цеглин ще залишилось */
+    private int bricksLeft;
 
     /** Генератор випадкових чисел */
     private RandomGenerator rgen = RandomGenerator.getInstance();
@@ -67,7 +73,6 @@ public class breakout extends GraphicsProgram {
         setupBricks();
         setupPaddle();
         addMouseListeners();
-        setupBall();
         playGame();
     }
 
@@ -102,6 +107,9 @@ public class breakout extends GraphicsProgram {
                 }
 
                 add(brick);
+
+                // рахуємо цеглини
+                bricksLeft++;
             }
         }
     }
@@ -152,15 +160,47 @@ public class breakout extends GraphicsProgram {
         }
     }
 
-    /** Головний цикл гри: м'яч рухається, потім коротка пауза. */
+    /** Уся гра: життя, м'ячі, перемога або програш. */
     private void playGame() {
-        while (true) {
-            moveBall();
-            pause(10);
+        int lives = NTURNS;
+
+        // грає, поки є життя і є цеглини
+        while (lives > 0 && bricksLeft > 0) {
+            setupBall();
+            pause(1000); // час приготуватись
+
+            // цикл одного м'яча: поки він не впав на нижню стінку
+            while (bricksLeft > 0 && ball.getY() + 2 * BALL_RADIUS < HEIGHT) {
+                moveBall();
+                pause(PAUSE_TIME);
+            }
+
+            remove(ball);
+
+            // життя втрачається, тільки якщо цеглини ще є
+            if (bricksLeft > 0) {
+                lives--;
+            }
+        }
+
+        if (bricksLeft == 0) {
+            showMessage("YOU WIN!");
+        } else {
+            showMessage("GAME OVER");
         }
     }
 
-    /** Робить один крок м'яча і відбиває його від стінок. */
+    /** Пише повідомлення посередині вікна. */
+    private void showMessage(String text) {
+        GLabel label = new GLabel(text);
+        label.setFont("SansSerif-bold-24");
+
+        double x = (WIDTH - label.getWidth()) / 2;
+        double y = HEIGHT / 2;
+        add(label, x, y);
+    }
+
+    /** Робить один крок м'яча, відбиває його від стінок і перевіряє колізії. */
     private void moveBall() {
         ball.move(vx, vy);
 
@@ -179,10 +219,51 @@ public class breakout extends GraphicsProgram {
             vy = -vy;
         }
 
-        // нижня стінка (поки що теж відбиває, пізніше тут буде програш)
-        if (ball.getY() + 2 * BALL_RADIUS >= HEIGHT) {
+        // нижню стінку тут не перевіряємо: її обробляє playGame (м'яч втрачено)
+
+        // перевіряємо, чи м'яч у щось влучив
+        GObject collider = getCollidingObject();
+
+        if (collider == paddle) {
+            // відбиваємо вгору; abs не дає м'ячу "приклеїтися" до ракетки
+            vy = -Math.abs(vy);
+        } else if (collider != null) {
+            // це цеглина: прибираємо її, рахуємо і відбиваємо м'яч
+            remove(collider);
+            bricksLeft--;
             vy = -vy;
         }
     }
 
+    /**
+     * Перевіряє 4 кути квадрата, в який вписано м'яч.
+     * Повертає об'єкт, у який влучив м'яч, або null, якщо нічого немає.
+     */
+    private GObject getCollidingObject() {
+        double x = ball.getX();
+        double y = ball.getY();
+        double d = 2 * BALL_RADIUS;
+
+        // лівий верхній кут
+        GObject obj = getElementAt(x, y);
+        if (obj != null) {
+            return obj;
+        }
+
+        // правий верхній кут
+        obj = getElementAt(x + d, y);
+        if (obj != null) {
+            return obj;
+        }
+
+        // лівий нижній кут
+        obj = getElementAt(x, y + d);
+        if (obj != null) {
+            return obj;
+        }
+
+        // правий нижній кут (якщо тут null, то колізії немає)
+        obj = getElementAt(x + d, y + d);
+        return obj;
+    }
 }
