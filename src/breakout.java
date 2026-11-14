@@ -1,3 +1,4 @@
+
 import acm.graphics.*;
 import acm.program.*;
 import acm.util.*;
@@ -48,10 +49,15 @@ public class breakout extends GraphicsProgram {
     /** Number of turns */
     private static final int NTURNS = 3;
 
+    /** Ракетка (змінна класу, щоб її бачили всі методи) */
+    private GRect paddle;
+
     /* Method: run() */
     /** Runs the Breakout program. */
     public void run() {
         setupBricks();
+        setupPaddle();
+        addMouseListeners();
     }
 
     /** Створює ряди цеглин по центру вікна. */
@@ -87,6 +93,32 @@ public class breakout extends GraphicsProgram {
                 add(brick);
             }
         }
+    }
+
+    /** Створює ракетку внизу по центру. */
+    private void setupPaddle() {
+        int x = (WIDTH - PADDLE_WIDTH) / 2;
+        int y = HEIGHT - PADDLE_Y_OFFSET - PADDLE_HEIGHT;
+
+        paddle = new GRect(x, y, PADDLE_WIDTH, PADDLE_HEIGHT);
+        paddle.setFilled(true);
+        add(paddle);
+    }
+
+    /** Рухає ракетку за мишею (лише по x). */
+    public void mouseMoved(MouseEvent e) {
+        // ракетка центрується по курсору
+        int x = e.getX() - PADDLE_WIDTH / 2;
+
+        // не виходимо за ліву і праву стінки
+        if (x < 0) {
+            x = 0;
+        }
+        if (x > WIDTH - PADDLE_WIDTH) {
+            x = WIDTH - PADDLE_WIDTH;
+        }
+
+        paddle.setLocation(x, paddle.getY());
     }
 
 }
