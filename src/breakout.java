@@ -52,12 +52,23 @@ public class breakout extends GraphicsProgram {
     /** Ракетка (змінна класу, щоб її бачили всі методи) */
     private GRect paddle;
 
+    /** М'яч */
+    private GOval ball;
+
+    /** Швидкість м'яча: зміна позиції за один крок */
+    private double vx, vy;
+
+    /** Генератор випадкових чисел */
+    private RandomGenerator rgen = RandomGenerator.getInstance();
+
     /* Method: run() */
     /** Runs the Breakout program. */
     public void run() {
         setupBricks();
         setupPaddle();
         addMouseListeners();
+        setupBall();
+        playGame();
     }
 
     /** Створює ряди цеглин по центру вікна. */
@@ -121,9 +132,57 @@ public class breakout extends GraphicsProgram {
         paddle.setLocation(x, paddle.getY());
     }
 
+    /** Створює м'яч по центру вікна і задає йому початкову швидкість. */
+    private void setupBall() {
+        // GOval ставиться за лівий верхній кут, тому віднімаємо радіус
+        int x = WIDTH / 2 - BALL_RADIUS;
+        int y = HEIGHT / 2 - BALL_RADIUS;
+
+        ball = new GOval(x, y, 2 * BALL_RADIUS, 2 * BALL_RADIUS);
+        ball.setFilled(true);
+        add(ball);
+
+        // м'яч летить вниз
+        vy = 3.0;
+
+        // vx випадкове від 1.0 до 3.0, а потім випадково вліво або вправо
+        vx = rgen.nextDouble(1.0, 3.0);
+        if (rgen.nextBoolean(0.5)) {
+            vx = -vx;
+        }
+    }
+
+    /** Головний цикл гри: м'яч рухається, потім коротка пауза. */
+    private void playGame() {
+        while (true) {
+            moveBall();
+            pause(10);
+        }
+    }
+
+    /** Робить один крок м'яча і відбиває його від стінок. */
+    private void moveBall() {
+        ball.move(vx, vy);
+
+        // права стінка: права межа м'яча = x + діаметр
+        if (ball.getX() + 2 * BALL_RADIUS >= WIDTH) {
+            vx = -vx;
+        }
+
+        // ліва стінка
+        if (ball.getX() <= 0) {
+            vx = -vx;
+        }
+
+        // верхня стінка
+        if (ball.getY() <= 0) {
+            vy = -vy;
+        }
+
+        // нижня стінка (поки що теж відбиває, пізніше тут буде програш)
+        if (ball.getY() + 2 * BALL_RADIUS >= HEIGHT) {
+            vy = -vy;
+        }
+    }
+
 }
-
-
-
-
-
