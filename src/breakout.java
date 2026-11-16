@@ -51,6 +51,12 @@ public class breakout extends GraphicsProgram {
     /** Пауза між кроками м'яча в мілісекундах (менше = швидша гра) */
     private static final int PAUSE_TIME = 10;
 
+    /** Кнопка "Почати" на стартовій сторінці */
+    private static final int START_W = 160;
+    private static final int START_H = 45;
+    private static final int START_X = (WIDTH - START_W) / 2;
+    private static final int START_Y = 400;
+
     /** Ракетка (змінна класу, щоб її бачили всі методи) */
     private GRect paddle;
 
@@ -63,16 +69,101 @@ public class breakout extends GraphicsProgram {
     /** Скільки цеглин ще залишилось */
     private int bricksLeft;
 
+    /** Чи натиснули кнопку "Почати" */
+    private boolean gameStarted = false;
+
     /** Генератор випадкових чисел */
     private RandomGenerator rgen = RandomGenerator.getInstance();
 
     /* Method: run() */
     /** Runs the Breakout program. */
     public void run() {
+        addMouseListeners();
+        showStartScreen();
         setupBricks();
         setupPaddle();
-        addMouseListeners();
         playGame();
+    }
+
+    /** Стартова сторінка: назва гри, правила і кнопка "Почати". Чекає, поки натиснуть кнопку. */
+    private void showStartScreen() {
+        // темний фон
+        GRect background = new GRect(WIDTH, HEIGHT);
+        background.setColor(new Color(30, 30, 60));
+        background.setFilled(true);
+        add(background, 0, 0);
+
+        // назва гри
+        addCenteredText("BREAKOUT", 150, "SansSerif-bold-48", Color.WHITE);
+        addCenteredText("Збий усі цеглини!", 190, "SansSerif-22", Color.YELLOW);
+
+        // п'ять кольорових цеглин для краси (кольори такі самі, як у грі)
+        int decorWidth = 60;
+        int decorSep = 6;
+        int decorX = (WIDTH - (5 * decorWidth + 4 * decorSep)) / 2;
+        for (int i = 0; i < 5; i++) {
+            GRect decor = new GRect(decorX + i * (decorWidth + decorSep), 230, decorWidth, 20);
+            decor.setColor(getBrickColor(i * 2));
+            decor.setFilled(true);
+            add(decor);
+        }
+
+        // правила
+        addCenteredText("Рухайте мишею ракетку", 300, "SansSerif-16", Color.WHITE);
+        addCenteredText("Не дайте м'ячу впасти вниз", 325, "SansSerif-16", Color.WHITE);
+        addCenteredText("У вас " + NTURNS + " життя", 350, "SansSerif-16", Color.WHITE);
+
+        // кнопка "Почати"
+        GRect button = new GRect(START_W, START_H);
+        button.setColor(new Color(0, 200, 120));
+        button.setFilled(true);
+        add(button, START_X, START_Y);
+
+        GLabel buttonText = new GLabel("Почати");
+        buttonText.setFont("SansSerif-bold-22");
+        buttonText.setColor(Color.WHITE);
+        add(buttonText, START_X + (START_W - buttonText.getWidth()) / 2,
+                START_Y + (START_H + buttonText.getAscent()) / 2 - 3);
+
+        // чекаємо, поки гравець натисне кнопку
+        while (!gameStarted) {
+            pause(50);
+        }
+
+        // прибираємо стартову сторінку
+        removeAll();
+    }
+
+    /** Пише текст по центру вікна заданим кольором. */
+    private void addCenteredText(String text, double y, String font, Color color) {
+        GLabel label = new GLabel(text);
+        label.setFont(font);
+        label.setColor(color);
+        add(label, (WIDTH - label.getWidth()) / 2, y);
+    }
+
+    /** Клік мишею: якщо влучили в кнопку "Почати", починаємо гру. */
+    public void mouseClicked(MouseEvent e) {
+        if (!gameStarted
+                && e.getX() >= START_X && e.getX() <= START_X + START_W
+                && e.getY() >= START_Y && e.getY() <= START_Y + START_H) {
+            gameStarted = true;
+        }
+    }
+
+    /** Колір цеглини залежить від номера ряду (по два ряди кожного кольору). */
+    private Color getBrickColor(int row) {
+        if (row < 2) {
+            return new Color(233, 30, 99);      // малиновий
+        } else if (row < 4) {
+            return new Color(156, 39, 176);     // фіолетовий
+        } else if (row < 6) {
+            return new Color(33, 150, 243);     // синій
+        } else if (row < 8) {
+            return new Color(0, 150, 136);      // бірюзовий
+        } else {
+            return new Color(139, 195, 74);     // салатовий
+        }
     }
 
     /** Створює ряди цеглин по центру вікна. */
@@ -92,18 +183,8 @@ public class breakout extends GraphicsProgram {
                 GRect brick = new GRect(x, y, BRICK_WIDTH, BRICK_HEIGHT);
                 brick.setFilled(true);
 
-                // колір залежить від номера ряду (по два ряди кожного кольору)
-                if (row < 2) {
-                    brick.setColor(Color.RED);
-                } else if (row < 4) {
-                    brick.setColor(Color.ORANGE);
-                } else if (row < 6) {
-                    brick.setColor(Color.YELLOW);
-                } else if (row < 8) {
-                    brick.setColor(Color.GREEN);
-                } else {
-                    brick.setColor(Color.CYAN);
-                }
+                // колір залежить від номера ряду
+                brick.setColor(getBrickColor(row));
 
                 add(brick);
 
@@ -125,6 +206,11 @@ public class breakout extends GraphicsProgram {
 
     /** Рухає ракетку за мишею (лише по x). */
     public void mouseMoved(MouseEvent e) {
+        // на стартовій сторінці ракетки ще немає
+        if (paddle == null) {
+            return;
+        }
+
         // ракетка центрується по курсору
         int x = e.getX() - PADDLE_WIDTH / 2;
 
@@ -266,5 +352,3 @@ public class breakout extends GraphicsProgram {
         return obj;
     }
 }
-
-
