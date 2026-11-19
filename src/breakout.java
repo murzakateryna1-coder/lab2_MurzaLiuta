@@ -5,6 +5,8 @@ import acm.util.*;
 import java.applet.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.io.File;
+import javax.sound.sampled.*;
 
 public class breakout extends GraphicsProgram {
 
@@ -51,17 +53,55 @@ public class breakout extends GraphicsProgram {
     /** Пауза між кроками м'яча в мілісекундах (менше = швидша гра) */
     private static final int PAUSE_TIME = 10;
 
+    /** Очки за одну цеглину та поріг для 2-го рівня */
+    private static final int BRICK_POINTS = 10;
+    private static final int LEVEL_2_MIN_SCORE = 50;
+
     /** Кнопка "Почати" на стартовій сторінці */
     private static final int START_W = 160;
     private static final int START_H = 45;
     private static final int START_X = (WIDTH - START_W) / 2;
-    private static final int START_Y = 400;
+    private static final int START_Y = 415;
+
+    /** Налаштування фото сердечок (життів) у правому верхньому кутку */
+    private static final String HEART_IMAGE = "heart.png";
+    private static final int HEART_SIZE = 35;
+    private static final int HEART_SEP = 6;
+    private static final int HEART_Y = 20;
+
+    /** Налаштування фото монети у лівому верхньому кутку (навпроти сердечок) */
+    private static final String COIN_IMAGE = "coin.png";
+    private static final int COIN_SIZE = 35;
+
+    /** Назви аудіофайлів (.wav) у корені проєкту */
+    private static final String SOUND_BG_MUSIC = "sounds/bg_music.wav";
+    private static final String SOUND_BRICK_HIT = "sounds/bricks.wav";
+    private static final String SOUND_WIN = "sounds/win.wav";
+    private static final String SOUND_LOSE = "lose.wav";
+
+    /** Аудіокліпи */
+    private Clip bg_music;
+    private Clip bricks;
+    private Clip win;
+    private Clip loseClip;
 
     /** Ракетка (змінна класу, щоб її бачили всі методи) */
     private GRect paddle;
 
     /** М'яч */
     private GOval ball;
+
+    /** Три сердечка для відображення життів */
+    private GImage heart1;
+    private GImage heart2;
+    private GImage heart3;
+
+    /** Значок монети та текст поточного рахунку */
+    private GImage coinIcon;
+    private GLabel scoreLabel;
+
+    /** Поточна кількість очок */
+    private int score = 0;
 
     /** Швидкість м'яча: зміна позиції за один крок */
     private double vx, vy;
@@ -75,11 +115,33 @@ public class breakout extends GraphicsProgram {
     /** Генератор випадкових чисел */
     private RandomGenerator rgen = RandomGenerator.getInstance();
 
+    /** Встановлює розмір вікна та завантажує звуки при запуску */
+    public void init() {
+        setSize(APPLICATION_WIDTH, APPLICATION_HEIGHT);
+
+        bg_music = loadSound(SOUND_BG_MUSIC);
+        bricks = loadSound(SOUND_BRICK_HIT);
+        win = loadSound(SOUND_WIN);
+        loseClip = loadSound(SOUND_LOSE);
+    }
+    
+
     /* Method: run() */
     /** Runs the Breakout program. */
     public void run() {
+        // Враховуємо рамки та меню вікна, щоб ігрове поле було рівно 400x600
+        int borderW = APPLICATION_WIDTH - getWidth();
+        int borderH = APPLICATION_HEIGHT - getHeight();
+        if (borderW > 0 || borderH > 0) {
+            setSize(APPLICATION_WIDTH + borderW, APPLICATION_HEIGHT + borderH);
+            pause(50);
+        }
+
         addMouseListeners();
         showStartScreen();
+        startBgMusic();
+        setupScore();
+        setupHearts();
         setupBricks();
         setupPaddle();
         playGame();
@@ -94,24 +156,27 @@ public class breakout extends GraphicsProgram {
         add(background, 0, 0);
 
         // назва гри
-        addCenteredText("BREAKOUT", 150, "SansSerif-bold-48", Color.WHITE);
-        addCenteredText("Збий усі цеглини!", 190, "SansSerif-22", Color.YELLOW);
+        addCenteredText("BREAKOUT", 115, "SansSerif-bold-48", Color.WHITE);
+        addCenteredText("Збий усі цеглини!", 155, "SansSerif-22", Color.YELLOW);
 
         // п'ять кольорових цеглин для краси (кольори такі самі, як у грі)
         int decorWidth = 60;
         int decorSep = 6;
         int decorX = (WIDTH - (5 * decorWidth + 4 * decorSep)) / 2;
         for (int i = 0; i < 5; i++) {
-            GRect decor = new GRect(decorX + i * (decorWidth + decorSep), 230, decorWidth, 20);
+            GRect decor = new GRect(decorX + i * (decorWidth + decorSep), 185, decorWidth, 18);
             decor.setColor(getBrickColor(i * 2));
             decor.setFilled(true);
             add(decor);
         }
 
-        // правила
-        addCenteredText("Рухайте мишею ракетку", 300, "SansSerif-16", Color.WHITE);
-        addCenteredText("Не дайте м'ячу впасти вниз", 325, "SansSerif-16", Color.WHITE);
-        addCenteredText("У вас " + NTURNS + " життя", 350, "SansSerif-16", Color.WHITE);
+        // правила гри та умова переходу на 2-й рівень
+        addCenteredText("Рухайте мишею ракетку", 240, "SansSerif-15", Color.WHITE);
+        addCenteredText("Не дайте м'ячу впасти. У вас " + NTURNS + " життя", 265, "SansSerif-15", Color.WHITE);
+        addCenteredText("1 цеглина = " + BRICK_POINTS + " очок (усього 100 цеглин)", 295, "SansSerif-bold-15", Color.YELLOW);
+        addCenteredText("Поки не наберете " + LEVEL_2_MIN_SCORE + " очок,", 325, "SansSerif-15", new Color(100, 255, 180));
+        addCenteredText("на 2-й рівень не переходите", 347, "SansSerif-15", new Color(100, 255, 180));
+        addCenteredText("(2-го рівня поки що немає)", 372, "SansSerif-14", Color.LIGHT_GRAY);
 
         // кнопка "Почати"
         GRect button = new GRect(START_W, START_H);
@@ -132,6 +197,39 @@ public class breakout extends GraphicsProgram {
 
         // прибираємо стартову сторінку
         removeAll();
+    }
+
+    /** Додає значок монети та лічильник очок у лівому верхньому кутку (навпроти сердечок). */
+    private void setupScore() {
+        int leftMargin = 15;
+
+        coinIcon = new GImage(COIN_IMAGE);
+        coinIcon.setSize(COIN_SIZE, COIN_SIZE);
+        add(coinIcon, leftMargin, HEART_Y);
+
+        score = 0;
+        scoreLabel = new GLabel("Очки: " + score);
+        scoreLabel.setFont("SansSerif-bold-18");
+        scoreLabel.setColor(Color.BLACK);
+        add(scoreLabel, leftMargin + COIN_SIZE + 8,
+                HEART_Y + (COIN_SIZE + scoreLabel.getAscent()) / 2.0 - 2);
+    }
+
+    /** Додає три фото сердечок у правому верхньому кутку. */
+    private void setupHearts() {
+        int rightMargin = 15;
+
+        heart3 = new GImage(HEART_IMAGE);
+        heart3.setSize(HEART_SIZE, HEART_SIZE);
+        add(heart3, WIDTH - rightMargin - HEART_SIZE, HEART_Y);
+
+        heart2 = new GImage(HEART_IMAGE);
+        heart2.setSize(HEART_SIZE, HEART_SIZE);
+        add(heart2, WIDTH - rightMargin - 2 * HEART_SIZE - HEART_SEP, HEART_Y);
+
+        heart1 = new GImage(HEART_IMAGE);
+        heart1.setSize(HEART_SIZE, HEART_SIZE);
+        add(heart1, WIDTH - rightMargin - 3 * HEART_SIZE - 2 * HEART_SEP, HEART_Y);
     }
 
     /** Пише текст по центру вікна заданим кольором. */
@@ -265,24 +363,37 @@ public class breakout extends GraphicsProgram {
             // життя втрачається, тільки якщо цеглини ще є
             if (bricksLeft > 0) {
                 lives--;
+
+                // прибираємо одне сердечко з екрана
+                if (lives == 2 && heart3 != null) {
+                    remove(heart3);
+                    heart3 = null;
+                } else if (lives == 1 && heart2 != null) {
+                    remove(heart2);
+                    heart2 = null;
+                } else if (lives == 0 && heart1 != null) {
+                    remove(heart1);
+                    heart1 = null;
+                }
             }
         }
 
+        // зупиняємо фонову музику в кінці гри
+        stopBgMusic();
+
         if (bricksLeft == 0) {
-            showMessage("YOU WIN!");
+            playSound(win);
+            addCenteredText("YOU WIN! Очки: " + score, HEIGHT / 2.0, "SansSerif-bold-22", new Color(0, 150, 80));
+            addCenteredText("2-го рівня поки що немає", HEIGHT / 2.0 + 30, "SansSerif-16", Color.DARK_GRAY);
+        } else if (score >= LEVEL_2_MIN_SCORE) {
+            playSound(loseClip);
+            addCenteredText("GAME OVER! Очки: " + score, HEIGHT / 2.0, "SansSerif-bold-22", Color.RED);
+            addCenteredText("50+ очок набрано, але 2-го рівня поки немає", HEIGHT / 2.0 + 30, "SansSerif-15", Color.DARK_GRAY);
         } else {
-            showMessage("GAME OVER");
+            playSound(loseClip);
+            addCenteredText("GAME OVER! Очки: " + score + " / " + LEVEL_2_MIN_SCORE, HEIGHT / 2.0, "SansSerif-bold-20", Color.RED);
+            addCenteredText("Не вистачило очок для 2-го рівня", HEIGHT / 2.0 + 30, "SansSerif-16", Color.DARK_GRAY);
         }
-    }
-
-    /** Пише повідомлення посередині вікна. */
-    private void showMessage(String text) {
-        GLabel label = new GLabel(text);
-        label.setFont("SansSerif-bold-24");
-
-        double x = (WIDTH - label.getWidth()) / 2;
-        double y = HEIGHT / 2;
-        add(label, x, y);
     }
 
     /** Робить один крок м'яча, відбиває його від стінок і перевіряє колізії. */
@@ -312,10 +423,15 @@ public class breakout extends GraphicsProgram {
         if (collider == paddle) {
             // відбиваємо вгору; abs не дає м'ячу "приклеїтися" до ракетки
             vy = -Math.abs(vy);
-        } else if (collider != null) {
-            // це цеглина: прибираємо її, рахуємо і відбиваємо м'яч
+        } else if (collider != null
+                && collider != heart1 && collider != heart2 && collider != heart3
+                && collider != coinIcon && collider != scoreLabel) {
+            // це цеглина: прибираємо її, додаємо 10 очок, вмикаємо звук і відбиваємо м'яч
             remove(collider);
             bricksLeft--;
+            score += BRICK_POINTS;
+            scoreLabel.setLabel("Очки: " + score);
+            playSound(bricks);
             vy = -vy;
         }
     }
@@ -350,5 +466,52 @@ public class breakout extends GraphicsProgram {
         // правий нижній кут (якщо тут null, то колізії немає)
         obj = getElementAt(x + d, y + d);
         return obj;
+    }
+
+    // =====================================
+    // РОБОТА ЗІ ЗВУКАМИ (.WAV)
+    // =====================================
+
+    /** Завантажує звуковий файл .wav у пам'ять. */
+    private Clip loadSound(String filename) {
+        try {
+            File file = new File(filename);
+            if (!file.exists()) {
+                return null;
+            }
+            AudioInputStream audio = AudioSystem.getAudioInputStream(file);
+            Clip clip = AudioSystem.getClip();
+            clip.open(audio);
+            audio.close();
+            return clip;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Відтворює короткий звуковий ефект з початку. */
+    private void playSound(Clip sound) {
+        if (sound != null) {
+            if (sound.isRunning()) {
+                sound.stop();
+            }
+            sound.setFramePosition(0);
+            sound.start();
+        }
+    }
+
+    /** Запускає фонову музику по колу. */
+    private void startBgMusic() {
+        if (bg_music != null) {
+        	bg_music.setFramePosition(0);
+        	bg_music.loop(Clip.LOOP_CONTINUOUSLY);
+        }
+    }
+
+    /** Зупиняє фонову музику. */
+    private void stopBgMusic() {
+        if (bg_music != null && bg_music.isRunning()) {
+        	bg_music.stop();
+        }
     }
 }
