@@ -73,15 +73,17 @@ public class breakout extends GraphicsProgram {
     private static final String COIN_IMAGE = "coin.png";
     private static final int COIN_SIZE = 35;
 
-    /** Назви аудіофайлів (.wav) у корені проєкту */
+    /** Назви аудіофайлів (.wav) */
     private static final String SOUND_BG_MUSIC = "sounds/bg_music.wav";
     private static final String SOUND_BRICK_HIT = "sounds/bricks.wav";
+    private static final String SOUND_PADDLE_HIT = "sounds/paddle.wav";
     private static final String SOUND_WIN = "sounds/win.wav";
     private static final String SOUND_LOSE = "lose.wav";
 
     /** Аудіокліпи */
     private Clip bg_music;
     private Clip bricks;
+    private Clip paddleSound;
     private Clip win;
     private Clip loseClip;
 
@@ -121,14 +123,14 @@ public class breakout extends GraphicsProgram {
 
         bg_music = loadSound(SOUND_BG_MUSIC);
         bricks = loadSound(SOUND_BRICK_HIT);
+        paddleSound = loadSound(SOUND_PADDLE_HIT);
         win = loadSound(SOUND_WIN);
         loseClip = loadSound(SOUND_LOSE);
     }
-    
 
     /** Runs the Breakout program. */
     public void run() {
-        // Враховуємо рамки та меню вікна, щоб ігрове поле було рівно 400x600
+        // Враховуємо рамки та меню вікна, щоб ігрове поле відповідало заданим розмірам
         int borderW = APPLICATION_WIDTH - getWidth();
         int borderH = APPLICATION_HEIGHT - getHeight();
         if (borderW > 0 || borderH > 0) {
@@ -420,6 +422,10 @@ public class breakout extends GraphicsProgram {
         GObject collider = getCollidingObject();
 
         if (collider == paddle) {
+            if (vy > 0) {
+                playSound(paddleSound);
+            }
+
             // ставимо м'яч рівно на верхню межу ракетки, щоб він лише торкався її
             ball.setLocation(ball.getX(), paddle.getY() - 2 * BALL_RADIUS);
 
@@ -437,7 +443,6 @@ public class breakout extends GraphicsProgram {
             vy = -vy;
         }
     }
-
 
     /**
      * Перевіряє 4 кути квадрата, в який вписано м'яч.
@@ -506,15 +511,15 @@ public class breakout extends GraphicsProgram {
     /** Запускає фонову музику по колу. */
     private void startBgMusic() {
         if (bg_music != null) {
-        	bg_music.setFramePosition(0);
-        	bg_music.loop(Clip.LOOP_CONTINUOUSLY);
+            bg_music.setFramePosition(0);
+            bg_music.loop(Clip.LOOP_CONTINUOUSLY);
         }
     }
 
     /** Зупиняє фонову музику. */
     private void stopBgMusic() {
         if (bg_music != null && bg_music.isRunning()) {
-        	bg_music.stop();
+            bg_music.stop();
         }
     }
 }
