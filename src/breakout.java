@@ -11,8 +11,8 @@ import javax.sound.sampled.*;
 public class breakout extends GraphicsProgram {
 
     /** Width and height of application window in pixels */
-    public static final int APPLICATION_WIDTH = 400;
-    public static final int APPLICATION_HEIGHT = 600;
+    public static final int APPLICATION_WIDTH = 600;
+    public static final int APPLICATION_HEIGHT = 700;
 
     /** Dimensions of game board (usually the same) */
     private static final int WIDTH = APPLICATION_WIDTH;
@@ -126,7 +126,6 @@ public class breakout extends GraphicsProgram {
     }
     
 
-    /* Method: run() */
     /** Runs the Breakout program. */
     public void run() {
         // Враховуємо рамки та меню вікна, щоб ігрове поле було рівно 400x600
@@ -421,6 +420,9 @@ public class breakout extends GraphicsProgram {
         GObject collider = getCollidingObject();
 
         if (collider == paddle) {
+            // ставимо м'яч рівно на верхню межу ракетки, щоб він лише торкався її
+            ball.setLocation(ball.getX(), paddle.getY() - 2 * BALL_RADIUS);
+
             // відбиваємо вгору; abs не дає м'ячу "приклеїтися" до ракетки
             vy = -Math.abs(vy);
         } else if (collider != null
@@ -435,6 +437,7 @@ public class breakout extends GraphicsProgram {
             vy = -vy;
         }
     }
+
 
     /**
      * Перевіряє 4 кути квадрата, в який вписано м'яч.
