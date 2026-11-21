@@ -100,6 +100,7 @@ public class breakout extends GraphicsProgram {
     private static final String SOUND_BG_MUSIC = "sounds/bg_music.wav";
     private static final String SOUND_BRICK_HIT = "sounds/bricks.wav";
     private static final String SOUND_PADDLE_HIT = "sounds/paddle.wav";
+    private static final String SOUND_LEVEL_UP = "sounds/level_up.wav";
     private static final String SOUND_WIN = "sounds/win.wav";
     private static final String SOUND_LOSE = "lose.wav";
 
@@ -107,6 +108,7 @@ public class breakout extends GraphicsProgram {
     private Clip bg_music;
     private Clip bricks;
     private Clip paddleSound;
+    private Clip levelUpSound;
     private Clip win;
     private Clip loseClip;
 
@@ -160,6 +162,7 @@ public class breakout extends GraphicsProgram {
         bg_music = loadSound(SOUND_BG_MUSIC);
         bricks = loadSound(SOUND_BRICK_HIT);
         paddleSound = loadSound(SOUND_PADDLE_HIT);
+        levelUpSound = loadSound(SOUND_LEVEL_UP);
         win = loadSound(SOUND_WIN);
         loseClip = loadSound(SOUND_LOSE);
     }
@@ -600,6 +603,8 @@ public class breakout extends GraphicsProgram {
 
     /** Показує на 2.5 секунди назву рівня і підказку. */
     private void showLevelBanner(String titleText, String hintText) {
+        playSound(levelUpSound);
+
         GLabel title = new GLabel(titleText);
         title.setFont("SansSerif-bold-40");
         title.setColor(new Color(30, 30, 60));
