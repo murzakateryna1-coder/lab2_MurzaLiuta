@@ -66,6 +66,7 @@ public class breakout extends GraphicsProgram {
     /** Очки за одну цеглину та поріг для переходу на 2-й рівень */
     private static final int BRICK_POINTS = 10;
     private static final int LEVEL_2_MIN_SCORE = 50;
+    private static final int LEVEL_3_MIN_SCORE = 100;
 
     /** Кнопка "Почати" на стартовій сторінці */
     private static final int START_W = 160;
@@ -128,6 +129,10 @@ public class breakout extends GraphicsProgram {
     /** Швидкість м'яча: зміна позиції за один крок */
     private double vx, vy;
 
+    /** Друга кулька (з'являється на 3-му рівні) та її швидкість; null = другої кульки немає */
+    private GOval ball2;
+    private double vx2, vy2;
+
     /** Скільки цеглин ще залишилось */
     private int bricksLeft;
 
@@ -171,6 +176,10 @@ public class breakout extends GraphicsProgram {
             startLevel2();
             playLevel();             // 2-й рівень
         }
+        if (lives > 0) {             // набрано 100 очок і ще є життя
+            startLevel3();
+            playLevel();             // 3-й рівень
+        }
         finishGame();
     }
 
@@ -199,11 +208,12 @@ public class breakout extends GraphicsProgram {
 
         // правила гри
         addCenteredText("Рухайте мишею ракетку", 240, "SansSerif-15", Color.WHITE);
-        addCenteredText("Не дайте м'ячу впасти. У вас " + NTURNS + " життя", 265, "SansSerif-15", Color.WHITE);
+        addCenteredText("Не дайте м'ячу впасти. У вас " + NTURNS + " життя на кожному рівні", 265, "SansSerif-15", Color.WHITE);
         addCenteredText("1 цеглина = " + BRICK_POINTS + " очок (усього 100 цеглин)", 295, "SansSerif-bold-15", Color.YELLOW);
         addCenteredText("Набери " + LEVEL_2_MIN_SCORE + " очок і перейдеш на 2-й рівень", 325, "SansSerif-15", new Color(100, 255, 180));
         addCenteredText("2-й рівень: швидший м'яч, менша ракетка", 347, "SansSerif-15", Color.LIGHT_GRAY);
         addCenteredText("і рухома перешкода!", 372, "SansSerif-15", Color.LIGHT_GRAY);
+        addCenteredText("3-й рівень: удар об перешкоду додає 2-гу кульку", 397, "SansSerif-14", Color.LIGHT_GRAY);
 
         // кнопка "Почати"
         GRect button = new GRect(START_W, START_H);
@@ -370,10 +380,13 @@ public class breakout extends GraphicsProgram {
         }
     }
 
-    /** Чи завершено поточний рівень: 1-й за очками, 2-й коли збито всі цеглини. */
+    /** Чи завершено поточний рівень: 1-й і 2-й за очками, 3-й коли збито всі цеглини. */
     private boolean levelDone() {
         if (level == 1) {
             return score >= LEVEL_2_MIN_SCORE;
+        }
+        if (level == 2) {
+            return score >= LEVEL_3_MIN_SCORE;
         }
         return bricksLeft == 0;
     }
@@ -385,13 +398,27 @@ public class breakout extends GraphicsProgram {
             pause(1000); // час приготуватись
 
             // цикл одного м'яча: поки він не впав на нижню стінку
-            while (!levelDone() && ball.getY() + 2 * BALL_RADIUS < HEIGHT) {
+            boolean ballAlive = true;
+            while (!levelDone() && ballAlive) {
                 moveBall();
+
+                // друга кулька рухається тим самим методом: тимчасово міняємо кульки місцями
+                if (ball2 != null) {
+                    swapBalls();
+                    moveBall();
+                    swapBalls();
+                }
+
                 moveObstacle();
                 pause(PAUSE_TIME);
+                ballAlive = checkFallenBalls();
             }
 
             remove(ball);
+            if (ball2 != null) {
+                remove(ball2);
+                ball2 = null;
+            }
 
             // життя втрачається, тільки якщо рівень ще не завершено
             if (!levelDone()) {
@@ -418,18 +445,51 @@ public class breakout extends GraphicsProgram {
         speedFactor = LEVEL2_SPEED;
         paddleWidth = PADDLE_WIDTH_LEVEL2;
 
+        resetLives();
         clearBricks();
         remove(paddle);
         setupPaddle();
         setupBricks();
         setupObstacle();
 
-        GLabel title = new GLabel("РІВЕНЬ 2");
+        showLevelBanner("РІВЕНЬ 2", "Швидший м'яч, менша ракетка, рухома перешкода");
+    }
+
+    /** Готує 3-й рівень: нові цеглини; удар об перешкоду додає другу кульку. */
+    private void startLevel3() {
+        level = 3;
+
+        resetLives();
+        clearBricks();
+        setupBricks();
+
+        showLevelBanner("РІВЕНЬ 3", "Удар об перешкоду додає другу кульку!");
+    }
+
+    /** Повертає всі 3 життя: прибирає старі сердечка (якщо лишились) і малює нові. */
+    private void resetLives() {
+        if (heart1 != null) {
+            remove(heart1);
+        }
+        if (heart2 != null) {
+            remove(heart2);
+        }
+        if (heart3 != null) {
+            remove(heart3);
+        }
+
+        lives = NTURNS;
+        setupHearts();
+    }
+
+    /** Показує на 2.5 секунди назву рівня і підказку. */
+    private void showLevelBanner(String titleText, String hintText) {
+        GLabel title = new GLabel(titleText);
         title.setFont("SansSerif-bold-40");
         title.setColor(new Color(30, 30, 60));
         add(title, (WIDTH - title.getWidth()) / 2, 340);
 
-        GLabel hint = new GLabel("Швидший м'яч, менша ракетка, рухома перешкода");
+        GLabel hint = new GLabel(hintText);
         hint.setFont("SansSerif-16");
         hint.setColor(Color.DARK_GRAY);
         add(hint, (WIDTH - hint.getWidth()) / 2, 370);
@@ -437,6 +497,67 @@ public class breakout extends GraphicsProgram {
         pause(2500);
         remove(title);
         remove(hint);
+    }
+
+    /** Міняє першу і другу кульки місцями (разом зі швидкістю). */
+    private void swapBalls() {
+        GOval tmpBall = ball;
+        ball = ball2;
+        ball2 = tmpBall;
+
+        double tmpVx = vx;
+        vx = vx2;
+        vx2 = tmpVx;
+
+        double tmpVy = vy;
+        vy = vy2;
+        vy2 = tmpVy;
+    }
+
+    /**
+     * Прибирає кульки, що впали. Якщо впала лише одна, гра триває з іншою.
+     * Повертає false, коли кульок більше не лишилось.
+     */
+    private boolean checkFallenBalls() {
+        // друга кулька впала
+        if (ball2 != null && ball2.getY() + 2 * BALL_RADIUS >= HEIGHT) {
+            remove(ball2);
+            ball2 = null;
+        }
+
+        // перша кулька впала
+        if (ball.getY() + 2 * BALL_RADIUS >= HEIGHT) {
+            if (ball2 != null) {
+                // друга кулька стає головною
+                remove(ball);
+                ball = ball2;
+                vx = vx2;
+                vy = vy2;
+                ball2 = null;
+                return true;
+            }
+            return false;
+        }
+        return true;
+    }
+
+    /** Створює другу кульку на місці першої; летить в інший бік по горизонталі. */
+    private void spawnSecondBall() {
+        ball2 = new GOval(ball.getX(), ball.getY(), 2 * BALL_RADIUS, 2 * BALL_RADIUS);
+        ball2.setFilled(true);
+        add(ball2);
+
+        vx2 = -vx;
+        vy2 = vy;
+    }
+
+    /** Повертає об'єкт у точці, але не рахує самі кульки. */
+    private GObject getObjectAt(double x, double y) {
+        GObject obj = getElementAt(x, y);
+        if (obj == ball || obj == ball2) {
+            return null;
+        }
+        return obj;
     }
 
     /** Прибирає всі цеглини, що залишились з 1-го рівня (шукає їх за координатами сітки). */
@@ -483,10 +604,10 @@ public class breakout extends GraphicsProgram {
     private void finishGame() {
         stopBgMusic();
 
-        if (bricksLeft == 0) {
+        if (lives > 0) {
             playSound(win);
             addCenteredText("YOU WIN! Очки: " + score, HEIGHT / 2.0, "SansSerif-bold-22", new Color(0, 150, 80));
-            addCenteredText("Ти пройшов обидва рівні!", HEIGHT / 2.0 + 30, "SansSerif-16", Color.DARK_GRAY);
+            addCenteredText("Ти пройшов усі три рівні!", HEIGHT / 2.0 + 30, "SansSerif-16", Color.DARK_GRAY);
         } else {
             playSound(loseClip);
             addCenteredText("GAME OVER! Очки: " + score, HEIGHT / 2.0, "SansSerif-bold-22", Color.RED);
@@ -536,6 +657,11 @@ public class breakout extends GraphicsProgram {
                 ball.setLocation(ball.getX(), obstacle.getY() + OBSTACLE_HEIGHT);
             }
             vy = -vy;
+
+            // на 3-му рівні перший удар об перешкоду додає другу кульку
+            if (level == 3 && ball2 == null) {
+                spawnSecondBall();
+            }
         } else if (collider != null
                 && collider != heart1 && collider != heart2 && collider != heart3
                 && collider != coinIcon && collider != scoreLabel) {
@@ -559,25 +685,25 @@ public class breakout extends GraphicsProgram {
         double d = 2 * BALL_RADIUS;
 
         // лівий верхній кут
-        GObject obj = getElementAt(x, y);
+        GObject obj = getObjectAt(x, y);
         if (obj != null) {
             return obj;
         }
 
         // правий верхній кут
-        obj = getElementAt(x + d, y);
+        obj = getObjectAt(x + d, y);
         if (obj != null) {
             return obj;
         }
 
         // лівий нижній кут
-        obj = getElementAt(x, y + d);
+        obj = getObjectAt(x, y + d);
         if (obj != null) {
             return obj;
         }
 
         // правий нижній кут (якщо тут null, то колізії немає)
-        obj = getElementAt(x + d, y + d);
+        obj = getObjectAt(x + d, y + d);
         return obj;
     }
 
