@@ -63,12 +63,13 @@ public class breakout extends GraphicsProgram {
     /** Кут відбиття від ракетки: частка швидкості по x на краю ракетки (0.8 = дуже похило) */
     private static final double BOUNCE_ANGLE_FACTOR = 0.8;
 
-    /** Бонус "широка ракетка": шанс випадання, розмір, швидкість падіння, на скільки пікселів ширша, час дії (мс) */
+    /** Бонус "ширша ракетка": шанс випадання, розмір, швидкість падіння,
+     *  на скільки пікселів ракетка росте за кожен бонус і максимальна ширина */
     private static final double BONUS_CHANCE = 0.2;
     private static final int BONUS_RADIUS = 10;
     private static final double BONUS_SPEED = 2.5;
-    private static final int PADDLE_BONUS_EXTRA = 30;
-    private static final int BONUS_TIME = 10000;
+    private static final int PADDLE_BONUS_EXTRA = 20;
+    private static final int MAX_PADDLE_WIDTH = 200;
 
     /** Пауза між кроками м'яча в мілісекундах (менше = швидша гра) */
     private static final int PAUSE_TIME = 10;
@@ -132,10 +133,8 @@ public class breakout extends GraphicsProgram {
     private double speedFactor = 1.0;
     private int paddleWidth = PADDLE_WIDTH;
 
-    /** Бонус, що падає (null = бонусу на екрані немає), і стан бонусу "широка ракетка" */
+    /** Бонус, що падає (null = бонусу на екрані немає) */
     private GOval bonus;
-    private boolean paddleWide = false;
-    private long paddleWideUntil = 0;
 
     /** Рухома перешкода та її швидкість */
     private GRect obstacle;
@@ -143,10 +142,6 @@ public class breakout extends GraphicsProgram {
 
     /** Швидкість м'яча: зміна позиції за один крок */
     private double vx, vy;
-
-    /** Друга кулька (з'являється на 3-му рівні) та її швидкість; null = другої кульки немає */
-    private GOval ball2;
-    private double vx2, vy2;
 
     /** Скільки цеглин ще залишилось */
     private int bricksLeft;
@@ -228,7 +223,7 @@ public class breakout extends GraphicsProgram {
         addCenteredText("Набери " + LEVEL_2_MIN_SCORE + " очок і перейдеш на 2-й рівень", 325, "SansSerif-15", new Color(100, 255, 180));
         addCenteredText("2-й рівень: швидший м'яч, менша ракетка", 347, "SansSerif-15", Color.LIGHT_GRAY);
         addCenteredText("і рухома перешкода!", 372, "SansSerif-15", Color.LIGHT_GRAY);
-        addCenteredText("3-й рівень: 2-га кулька і цеглини на 2 удари", 397, "SansSerif-14", Color.LIGHT_GRAY);
+        addCenteredText("3-й рівень: цеглини міцні, потрібно 2 удари", 397, "SansSerif-14", Color.LIGHT_GRAY);
 
         // кнопка "Почати"
         GRect button = new GRect(START_W, START_H);
@@ -417,29 +412,15 @@ public class breakout extends GraphicsProgram {
             pause(1000); // час приготуватись
 
             // цикл одного м'яча: поки він не впав на нижню стінку
-            boolean ballAlive = true;
-            while (!levelDone() && ballAlive) {
+            while (!levelDone() && ball.getY() + 2 * BALL_RADIUS < HEIGHT) {
                 moveBall();
-
-                // друга кулька рухається тим самим методом: тимчасово міняємо кульки місцями
-                if (ball2 != null) {
-                    swapBalls();
-                    moveBall();
-                    swapBalls();
-                }
-
                 moveObstacle();
                 moveBonus();
                 pause(PAUSE_TIME);
-                ballAlive = checkFallenBalls();
             }
 
             removeBonus();
             remove(ball);
-            if (ball2 != null) {
-                remove(ball2);
-                ball2 = null;
-            }
 
             // життя втрачається, тільки якщо рівень ще не завершено
             if (!levelDone()) {
@@ -463,9 +444,9 @@ public class breakout extends GraphicsProgram {
     /** Готує 2-й рівень: швидший м'яч, менша ракетка, нові цеглини і перешкода. */
     private void startLevel2() {
         level = 2;
-        resetBonus();
+        removeBonus();
         speedFactor = LEVEL2_SPEED;
-        paddleWidth = PADDLE_WIDTH_LEVEL2;
+        paddleWidth = PADDLE_WIDTH_LEVEL2;   // початкова ширина ракетки на 2-му рівні
 
         resetLives();
         clearBricks();
@@ -477,16 +458,19 @@ public class breakout extends GraphicsProgram {
         showLevelBanner("РІВЕНЬ 2", "Швидший м'яч, менша ракетка, рухома перешкода");
     }
 
-    /** Готує 3-й рівень: нові цеглини; удар об перешкоду додає другу кульку. */
+    /** Готує 3-й рівень: нові цеглини на 2 удари, життя і ракетка як на початку рівня. */
     private void startLevel3() {
         level = 3;
-        resetBonus();
+        removeBonus();
+        paddleWidth = PADDLE_WIDTH_LEVEL2;   // початкова ширина ракетки (бонуси скинуто)
 
         resetLives();
         clearBricks();
+        remove(paddle);
+        setupPaddle();
         setupBricks();
 
-        showLevelBanner("РІВЕНЬ 3", "Друга кулька від перешкоди, цеглини на 2 удари!");
+        showLevelBanner("РІВЕНЬ 3", "Цеглини міцні: потрібно 2 удари!");
     }
 
     /** Відбиття від ракетки: чим далі від центру влучила кулька, тим похиліше вона летить. */
@@ -532,13 +516,8 @@ public class breakout extends GraphicsProgram {
         }
     }
 
-    /** Рухає бонус вниз, ловить його ракеткою і вимикає бонус, коли час вийшов. */
+    /** Рухає бонус вниз і ловить його ракеткою. */
     private void moveBonus() {
-        // чи не закінчився час широкої ракетки
-        if (paddleWide && System.currentTimeMillis() > paddleWideUntil) {
-            endPaddleBonus();
-        }
-
         if (bonus == null) {
             return;
         }
@@ -553,45 +532,31 @@ public class breakout extends GraphicsProgram {
 
         if (aboveOrOnPaddle && touchesPaddle) {
             removeBonus();
-            startPaddleBonus();
+            growPaddle();
         } else if (bonus.getY() >= HEIGHT) {
             removeBonus();
         }
     }
 
-    /** Робить ракетку ширшою на 10 секунд (повторний бонус продовжує час). */
-    private void startPaddleBonus() {
-        if (!paddleWide) {
-            paddleWide = true;
-            paddleWidth += PADDLE_BONUS_EXTRA;
-            paddle.setSize(paddleWidth, PADDLE_HEIGHT);
-
-            // розширюємо в обидва боки і не виходимо за стінки
-            double x = paddle.getX() - PADDLE_BONUS_EXTRA / 2.0;
-            if (x < 0) {
-                x = 0;
-            }
-            if (x > WIDTH - paddleWidth) {
-                x = WIDTH - paddleWidth;
-            }
-            paddle.setLocation(x, paddle.getY());
+    /** Кожен спійманий бонус робить ракетку ширшою (до MAX_PADDLE_WIDTH). */
+    private void growPaddle() {
+        int newWidth = paddleWidth + PADDLE_BONUS_EXTRA;
+        if (newWidth > MAX_PADDLE_WIDTH) {
+            newWidth = MAX_PADDLE_WIDTH;
         }
-        paddleWideUntil = System.currentTimeMillis() + BONUS_TIME;
-    }
+        int delta = newWidth - paddleWidth;
+        paddleWidth = newWidth;
+        paddle.setSize(paddleWidth, PADDLE_HEIGHT);
 
-    /** Повертає ракетці звичайну ширину. */
-    private void endPaddleBonus() {
-        if (paddleWide) {
-            paddleWide = false;
-            paddleWidth -= PADDLE_BONUS_EXTRA;
-            paddle.setSize(paddleWidth, PADDLE_HEIGHT);
-
-            double x = paddle.getX() + PADDLE_BONUS_EXTRA / 2.0;
-            if (x > WIDTH - paddleWidth) {
-                x = WIDTH - paddleWidth;
-            }
-            paddle.setLocation(x, paddle.getY());
+        // розширюємо в обидва боки і не виходимо за стінки
+        double x = paddle.getX() - delta / 2.0;
+        if (x < 0) {
+            x = 0;
         }
+        if (x > WIDTH - paddleWidth) {
+            x = WIDTH - paddleWidth;
+        }
+        paddle.setLocation(x, paddle.getY());
     }
 
     /** Прибирає бонус, що падає, з екрана. */
@@ -600,12 +565,6 @@ public class breakout extends GraphicsProgram {
             remove(bonus);
             bonus = null;
         }
-    }
-
-    /** На початку нового рівня: прибираємо бонус і повертаємо звичайну ракетку. */
-    private void resetBonus() {
-        removeBonus();
-        endPaddleBonus();
     }
 
     /** Номер ряду цеглини, обчислений за її координатою y. */
@@ -654,62 +613,10 @@ public class breakout extends GraphicsProgram {
         remove(hint);
     }
 
-    /** Міняє першу і другу кульки місцями (разом зі швидкістю). */
-    private void swapBalls() {
-        GOval tmpBall = ball;
-        ball = ball2;
-        ball2 = tmpBall;
-
-        double tmpVx = vx;
-        vx = vx2;
-        vx2 = tmpVx;
-
-        double tmpVy = vy;
-        vy = vy2;
-        vy2 = tmpVy;
-    }
-
-    /**
-     * Прибирає кульки, що впали. Якщо впала лише одна, гра триває з іншою.
-     * Повертає false, коли кульок більше не лишилось.
-     */
-    private boolean checkFallenBalls() {
-        // друга кулька впала
-        if (ball2 != null && ball2.getY() + 2 * BALL_RADIUS >= HEIGHT) {
-            remove(ball2);
-            ball2 = null;
-        }
-
-        // перша кулька впала
-        if (ball.getY() + 2 * BALL_RADIUS >= HEIGHT) {
-            if (ball2 != null) {
-                // друга кулька стає головною
-                remove(ball);
-                ball = ball2;
-                vx = vx2;
-                vy = vy2;
-                ball2 = null;
-                return true;
-            }
-            return false;
-        }
-        return true;
-    }
-
-    /** Створює другу кульку на місці першої; летить в інший бік по горизонталі. */
-    private void spawnSecondBall() {
-        ball2 = new GOval(ball.getX(), ball.getY(), 2 * BALL_RADIUS, 2 * BALL_RADIUS);
-        ball2.setFilled(true);
-        add(ball2);
-
-        vx2 = -vx;
-        vy2 = vy;
-    }
-
     /** Повертає об'єкт у точці, але не рахує кульки і бонус. */
     private GObject getObjectAt(double x, double y) {
         GObject obj = getElementAt(x, y);
-        if (obj == ball || obj == ball2 || obj == bonus) {
+        if (obj == ball || obj == bonus) {
             return null;
         }
         return obj;
@@ -813,11 +720,6 @@ public class breakout extends GraphicsProgram {
                 ball.setLocation(ball.getX(), obstacle.getY() + OBSTACLE_HEIGHT);
             }
             vy = -vy;
-
-            // на 3-му рівні перший удар об перешкоду додає другу кульку
-            if (level == 3 && ball2 == null) {
-                spawnSecondBall();
-            }
         } else if (collider != null
                 && collider != heart1 && collider != heart2 && collider != heart3
                 && collider != coinIcon && collider != scoreLabel) {
