@@ -60,6 +60,16 @@ public class breakout extends GraphicsProgram {
     private static final int OBSTACLE_Y = 260;
     private static final double OBSTACLE_SPEED = 2;
 
+    /** Кут відбиття від ракетки: частка швидкості по x на краю ракетки (0.8 = дуже похило) */
+    private static final double BOUNCE_ANGLE_FACTOR = 0.8;
+
+    /** Бонус "широка ракетка": шанс випадання, розмір, швидкість падіння, на скільки пікселів ширша, час дії (мс) */
+    private static final double BONUS_CHANCE = 0.2;
+    private static final int BONUS_RADIUS = 10;
+    private static final double BONUS_SPEED = 2.5;
+    private static final int PADDLE_BONUS_EXTRA = 30;
+    private static final int BONUS_TIME = 10000;
+
     /** Пауза між кроками м'яча в мілісекундах (менше = швидша гра) */
     private static final int PAUSE_TIME = 10;
 
@@ -121,6 +131,11 @@ public class breakout extends GraphicsProgram {
     private int lives = NTURNS;
     private double speedFactor = 1.0;
     private int paddleWidth = PADDLE_WIDTH;
+
+    /** Бонус, що падає (null = бонусу на екрані немає), і стан бонусу "широка ракетка" */
+    private GOval bonus;
+    private boolean paddleWide = false;
+    private long paddleWideUntil = 0;
 
     /** Рухома перешкода та її швидкість */
     private GRect obstacle;
@@ -213,7 +228,7 @@ public class breakout extends GraphicsProgram {
         addCenteredText("Набери " + LEVEL_2_MIN_SCORE + " очок і перейдеш на 2-й рівень", 325, "SansSerif-15", new Color(100, 255, 180));
         addCenteredText("2-й рівень: швидший м'яч, менша ракетка", 347, "SansSerif-15", Color.LIGHT_GRAY);
         addCenteredText("і рухома перешкода!", 372, "SansSerif-15", Color.LIGHT_GRAY);
-        addCenteredText("3-й рівень: удар об перешкоду додає 2-гу кульку", 397, "SansSerif-14", Color.LIGHT_GRAY);
+        addCenteredText("3-й рівень: 2-га кулька і цеглини на 2 удари", 397, "SansSerif-14", Color.LIGHT_GRAY);
 
         // кнопка "Почати"
         GRect button = new GRect(START_W, START_H);
@@ -318,8 +333,12 @@ public class breakout extends GraphicsProgram {
                 GRect brick = new GRect(x, y, BRICK_WIDTH, BRICK_HEIGHT);
                 brick.setFilled(true);
 
-                // колір залежить від номера ряду
-                brick.setColor(getBrickColor(row));
+                // колір залежить від номера ряду; на 3-му рівні цеглини темніші (міцні, 2 удари)
+                if (level == 3) {
+                    brick.setColor(getBrickColor(row).darker());
+                } else {
+                    brick.setColor(getBrickColor(row));
+                }
 
                 add(brick);
 
@@ -410,10 +429,12 @@ public class breakout extends GraphicsProgram {
                 }
 
                 moveObstacle();
+                moveBonus();
                 pause(PAUSE_TIME);
                 ballAlive = checkFallenBalls();
             }
 
+            removeBonus();
             remove(ball);
             if (ball2 != null) {
                 remove(ball2);
@@ -442,6 +463,7 @@ public class breakout extends GraphicsProgram {
     /** Готує 2-й рівень: швидший м'яч, менша ракетка, нові цеглини і перешкода. */
     private void startLevel2() {
         level = 2;
+        resetBonus();
         speedFactor = LEVEL2_SPEED;
         paddleWidth = PADDLE_WIDTH_LEVEL2;
 
@@ -458,12 +480,145 @@ public class breakout extends GraphicsProgram {
     /** Готує 3-й рівень: нові цеглини; удар об перешкоду додає другу кульку. */
     private void startLevel3() {
         level = 3;
+        resetBonus();
 
         resetLives();
         clearBricks();
         setupBricks();
 
-        showLevelBanner("РІВЕНЬ 3", "Удар об перешкоду додає другу кульку!");
+        showLevelBanner("РІВЕНЬ 3", "Друга кулька від перешкоди, цеглини на 2 удари!");
+    }
+
+    /** Відбиття від ракетки: чим далі від центру влучила кулька, тим похиліше вона летить. */
+    private void bounceFromPaddle() {
+        double speed = Math.sqrt(vx * vx + vy * vy);
+
+        // offset: -1 = лівий край ракетки, 0 = центр, 1 = правий край
+        double ballCenter = ball.getX() + BALL_RADIUS;
+        double paddleCenter = paddle.getX() + paddle.getWidth() / 2;
+        double offset = (ballCenter - paddleCenter) / (paddle.getWidth() / 2);
+        if (offset > 1) {
+            offset = 1;
+        }
+        if (offset < -1) {
+            offset = -1;
+        }
+
+        double newVx = offset * BOUNCE_ANGLE_FACTOR * speed;
+
+        // щоб кулька не літала суворо вертикально
+        double minVx = 0.5 * speedFactor;
+        if (Math.abs(newVx) < minVx) {
+            if (offset >= 0) {
+                newVx = minVx;
+            } else {
+                newVx = -minVx;
+            }
+        }
+
+        vx = newVx;
+        // загальна швидкість лишається такою самою
+        vy = -Math.sqrt(speed * speed - vx * vx);
+    }
+
+    /** Іноді з розбитої цеглини випадає бонус (одночасно на екрані не більше одного). */
+    private void maybeDropBonus(GObject brick) {
+        if (bonus == null && rgen.nextBoolean(BONUS_CHANCE)) {
+            double x = brick.getX() + BRICK_WIDTH / 2.0 - BONUS_RADIUS;
+            bonus = new GOval(x, brick.getY(), 2 * BONUS_RADIUS, 2 * BONUS_RADIUS);
+            bonus.setFilled(true);
+            bonus.setColor(new Color(255, 193, 7));
+            add(bonus);
+        }
+    }
+
+    /** Рухає бонус вниз, ловить його ракеткою і вимикає бонус, коли час вийшов. */
+    private void moveBonus() {
+        // чи не закінчився час широкої ракетки
+        if (paddleWide && System.currentTimeMillis() > paddleWideUntil) {
+            endPaddleBonus();
+        }
+
+        if (bonus == null) {
+            return;
+        }
+
+        bonus.move(0, BONUS_SPEED);
+
+        double bonusCenter = bonus.getX() + BONUS_RADIUS;
+        boolean aboveOrOnPaddle = bonusCenter >= paddle.getX()
+                && bonusCenter <= paddle.getX() + paddle.getWidth();
+        boolean touchesPaddle = bonus.getY() + 2 * BONUS_RADIUS >= paddle.getY()
+                && bonus.getY() <= paddle.getY() + PADDLE_HEIGHT;
+
+        if (aboveOrOnPaddle && touchesPaddle) {
+            removeBonus();
+            startPaddleBonus();
+        } else if (bonus.getY() >= HEIGHT) {
+            removeBonus();
+        }
+    }
+
+    /** Робить ракетку ширшою на 10 секунд (повторний бонус продовжує час). */
+    private void startPaddleBonus() {
+        if (!paddleWide) {
+            paddleWide = true;
+            paddleWidth += PADDLE_BONUS_EXTRA;
+            paddle.setSize(paddleWidth, PADDLE_HEIGHT);
+
+            // розширюємо в обидва боки і не виходимо за стінки
+            double x = paddle.getX() - PADDLE_BONUS_EXTRA / 2.0;
+            if (x < 0) {
+                x = 0;
+            }
+            if (x > WIDTH - paddleWidth) {
+                x = WIDTH - paddleWidth;
+            }
+            paddle.setLocation(x, paddle.getY());
+        }
+        paddleWideUntil = System.currentTimeMillis() + BONUS_TIME;
+    }
+
+    /** Повертає ракетці звичайну ширину. */
+    private void endPaddleBonus() {
+        if (paddleWide) {
+            paddleWide = false;
+            paddleWidth -= PADDLE_BONUS_EXTRA;
+            paddle.setSize(paddleWidth, PADDLE_HEIGHT);
+
+            double x = paddle.getX() + PADDLE_BONUS_EXTRA / 2.0;
+            if (x > WIDTH - paddleWidth) {
+                x = WIDTH - paddleWidth;
+            }
+            paddle.setLocation(x, paddle.getY());
+        }
+    }
+
+    /** Прибирає бонус, що падає, з екрана. */
+    private void removeBonus() {
+        if (bonus != null) {
+            remove(bonus);
+            bonus = null;
+        }
+    }
+
+    /** На початку нового рівня: прибираємо бонус і повертаємо звичайну ракетку. */
+    private void resetBonus() {
+        removeBonus();
+        endPaddleBonus();
+    }
+
+    /** Номер ряду цеглини, обчислений за її координатою y. */
+    private int getBrickRow(GObject brick) {
+        return (int) Math.round((brick.getY() - BRICK_Y_OFFSET) / (BRICK_HEIGHT + BRICK_SEP));
+    }
+
+    /** Чи це міцна цеглина (3-й рівень, ще не було удару): її колір темніший за звичайний. */
+    private boolean isStrongBrick(GObject brick) {
+        if (level != 3) {
+            return false;
+        }
+        return !brick.getColor().equals(getBrickColor(getBrickRow(brick)));
     }
 
     /** Повертає всі 3 життя: прибирає старі сердечка (якщо лишились) і малює нові. */
@@ -551,10 +706,10 @@ public class breakout extends GraphicsProgram {
         vy2 = vy;
     }
 
-    /** Повертає об'єкт у точці, але не рахує самі кульки. */
+    /** Повертає об'єкт у точці, але не рахує кульки і бонус. */
     private GObject getObjectAt(double x, double y) {
         GObject obj = getElementAt(x, y);
-        if (obj == ball || obj == ball2) {
+        if (obj == ball || obj == ball2 || obj == bonus) {
             return null;
         }
         return obj;
@@ -642,6 +797,7 @@ public class breakout extends GraphicsProgram {
         if (collider == paddle) {
             if (vy > 0) {
                 playSound(paddleSound);
+                bounceFromPaddle();   // кут залежить від місця влучання
             }
 
             // ставимо м'яч рівно на верхню межу ракетки, щоб він лише торкався її
@@ -665,11 +821,18 @@ public class breakout extends GraphicsProgram {
         } else if (collider != null
                 && collider != heart1 && collider != heart2 && collider != heart3
                 && collider != coinIcon && collider != scoreLabel) {
-            // це цеглина: прибираємо її, додаємо 10 очок, вмикаємо звук і відбиваємо м'яч
-            remove(collider);
-            bricksLeft--;
-            score += BRICK_POINTS;
-            scoreLabel.setLabel("Очки: " + score);
+            // це цеглина
+            if (isStrongBrick(collider)) {
+                // перший удар по міцній цеглині: вона світлішає, але лишається
+                collider.setColor(getBrickColor(getBrickRow(collider)));
+            } else {
+                // прибираємо цеглину (інколи з неї випадає бонус) і додаємо 10 очок
+                maybeDropBonus(collider);
+                remove(collider);
+                bricksLeft--;
+                score += BRICK_POINTS;
+                scoreLabel.setLabel("Очки: " + score);
+            }
             playSound(bricks);
             vy = -vy;
         }
