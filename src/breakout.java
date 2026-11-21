@@ -500,7 +500,7 @@ public class breakout extends GraphicsProgram {
 
             // відбиваємо вгору; abs не дає м'ячу "приклеїтися" до ракетки
             vy = -Math.abs(vy);
-        } else if (collider == obstacle) {
+        } else if (collider != null && collider == obstacle) {
             // виставляємо м'яч з того боку, з якого він прилетів, щоб не застряг
             if (vy > 0) {
                 ball.setLocation(ball.getX(), obstacle.getY() - 2 * BALL_RADIUS);
