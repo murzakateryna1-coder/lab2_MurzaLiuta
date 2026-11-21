@@ -63,8 +63,9 @@ public class breakout extends GraphicsProgram {
     /** Пауза між кроками м'яча в мілісекундах (менше = швидша гра) */
     private static final int PAUSE_TIME = 10;
 
-    /** Очки за одну цеглину */
+    /** Очки за одну цеглину та поріг для переходу на 2-й рівень */
     private static final int BRICK_POINTS = 10;
+    private static final int LEVEL_2_MIN_SCORE = 50;
 
     /** Кнопка "Почати" на стартовій сторінці */
     private static final int START_W = 160;
@@ -166,7 +167,7 @@ public class breakout extends GraphicsProgram {
         setupPaddle();
 
         playLevel();                 // 1-й рівень
-        if (bricksLeft == 0) {       // усі цеглини збито, переходимо далі
+        if (lives > 0) {             // набрано 50 очок і ще є життя, переходимо далі
             startLevel2();
             playLevel();             // 2-й рівень
         }
@@ -200,7 +201,7 @@ public class breakout extends GraphicsProgram {
         addCenteredText("Рухайте мишею ракетку", 240, "SansSerif-15", Color.WHITE);
         addCenteredText("Не дайте м'ячу впасти. У вас " + NTURNS + " життя", 265, "SansSerif-15", Color.WHITE);
         addCenteredText("1 цеглина = " + BRICK_POINTS + " очок (усього 100 цеглин)", 295, "SansSerif-bold-15", Color.YELLOW);
-        addCenteredText("Збий усі цеглини і перейдеш на 2-й рівень", 325, "SansSerif-15", new Color(100, 255, 180));
+        addCenteredText("Набери " + LEVEL_2_MIN_SCORE + " очок і перейдеш на 2-й рівень", 325, "SansSerif-15", new Color(100, 255, 180));
         addCenteredText("2-й рівень: швидший м'яч, менша ракетка", 347, "SansSerif-15", Color.LIGHT_GRAY);
         addCenteredText("і рухома перешкода!", 372, "SansSerif-15", Color.LIGHT_GRAY);
 
@@ -369,14 +370,22 @@ public class breakout extends GraphicsProgram {
         }
     }
 
-    /** Один рівень: грає, поки є життя і цеглини. */
+    /** Чи завершено поточний рівень: 1-й за очками, 2-й коли збито всі цеглини. */
+    private boolean levelDone() {
+        if (level == 1) {
+            return score >= LEVEL_2_MIN_SCORE;
+        }
+        return bricksLeft == 0;
+    }
+
+    /** Один рівень: грає, поки є життя і рівень не завершено. */
     private void playLevel() {
-        while (lives > 0 && bricksLeft > 0) {
+        while (lives > 0 && !levelDone()) {
             setupBall();
             pause(1000); // час приготуватись
 
             // цикл одного м'яча: поки він не впав на нижню стінку
-            while (bricksLeft > 0 && ball.getY() + 2 * BALL_RADIUS < HEIGHT) {
+            while (!levelDone() && ball.getY() + 2 * BALL_RADIUS < HEIGHT) {
                 moveBall();
                 moveObstacle();
                 pause(PAUSE_TIME);
@@ -384,8 +393,8 @@ public class breakout extends GraphicsProgram {
 
             remove(ball);
 
-            // життя втрачається, тільки якщо цеглини ще є
-            if (bricksLeft > 0) {
+            // життя втрачається, тільки якщо рівень ще не завершено
+            if (!levelDone()) {
                 lives--;
 
                 // прибираємо одне сердечко з екрана
@@ -409,6 +418,7 @@ public class breakout extends GraphicsProgram {
         speedFactor = LEVEL2_SPEED;
         paddleWidth = PADDLE_WIDTH_LEVEL2;
 
+        clearBricks();
         remove(paddle);
         setupPaddle();
         setupBricks();
@@ -427,6 +437,24 @@ public class breakout extends GraphicsProgram {
         pause(2500);
         remove(title);
         remove(hint);
+    }
+
+    /** Прибирає всі цеглини, що залишились з 1-го рівня (шукає їх за координатами сітки). */
+    private void clearBricks() {
+        int rowWidth = NBRICKS_PER_ROW * BRICK_WIDTH + (NBRICKS_PER_ROW - 1) * BRICK_SEP;
+        int startX = (WIDTH - rowWidth) / 2;
+
+        for (int row = 0; row < NBRICK_ROWS; row++) {
+            for (int col = 0; col < NBRICKS_PER_ROW; col++) {
+                double x = startX + col * (BRICK_WIDTH + BRICK_SEP) + BRICK_WIDTH / 2.0;
+                double y = BRICK_Y_OFFSET + row * (BRICK_HEIGHT + BRICK_SEP) + BRICK_HEIGHT / 2.0;
+                GObject brick = getElementAt(x, y);
+                if (brick != null) {
+                    remove(brick);
+                }
+            }
+        }
+        bricksLeft = 0;
     }
 
     /** Створює сіру рухому перешкоду посередині поля. */
