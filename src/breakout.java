@@ -52,7 +52,7 @@ public class breakout extends GraphicsProgram {
 
     /** Налаштування 2-го рівня */
     private static final int PADDLE_WIDTH_LEVEL2 = 40;
-    private static final double LEVEL2_SPEED = 1.5;   // м'яч швидший у 1.5 раза
+    private static final double LEVEL2_SPEED = 1.25;  // м'яч швидший у 1.25 раза (2-й і 3-й рівні)
 
     /** Рухома перешкода */
     private static final int OBSTACLE_WIDTH = 100;
