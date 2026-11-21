@@ -682,18 +682,22 @@ public class breakout extends GraphicsProgram {
         ball.move(vx, vy);
 
         // права стінка: права межа м'яча = x + діаметр
+        // повертаємо м'яч у поле і задаємо напрямок через abs, щоб він не застрягав у стіні
         if (ball.getX() + 2 * BALL_RADIUS >= WIDTH) {
-            vx = -vx;
+            ball.setLocation(WIDTH - 2 * BALL_RADIUS, ball.getY());
+            vx = -Math.abs(vx);
         }
 
         // ліва стінка
         if (ball.getX() <= 0) {
-            vx = -vx;
+            ball.setLocation(0, ball.getY());
+            vx = Math.abs(vx);
         }
 
         // верхня стінка
         if (ball.getY() <= 0) {
-            vy = -vy;
+            ball.setLocation(ball.getX(), 0);
+            vy = Math.abs(vy);
         }
 
         // нижню стінку тут не перевіряємо: її обробляє playLevel (м'яч втрачено)
