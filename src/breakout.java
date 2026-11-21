@@ -52,7 +52,8 @@ public class breakout extends GraphicsProgram {
 
     /** Налаштування 2-го рівня */
     private static final int PADDLE_WIDTH_LEVEL2 = 40;
-    private static final double LEVEL2_SPEED = 1.25;  // м'яч швидший у 1.25 раза (2-й і 3-й рівні)
+    private static final double LEVEL2_SPEED = 1.25;  // м'яч швидший у 1.25 раза (2-й рівень)
+    private static final double LEVEL3_SPEED = 1.4;   // на 3-му рівні трохи швидше
 
     /** Рухома перешкода */
     private static final int OBSTACLE_WIDTH = 100;
@@ -461,6 +462,7 @@ public class breakout extends GraphicsProgram {
     /** Готує 3-й рівень: нові цеглини на 2 удари, життя і ракетка як на початку рівня. */
     private void startLevel3() {
         level = 3;
+        speedFactor = LEVEL3_SPEED;
         removeBonus();
         paddleWidth = PADDLE_WIDTH_LEVEL2;   // початкова ширина ракетки (бонуси скинуто)
 
