@@ -50,10 +50,20 @@ public class breakout extends GraphicsProgram {
     /** Number of turns */
     private static final int NTURNS = 3;
 
+    /** Налаштування 2-го рівня */
+    private static final int PADDLE_WIDTH_LEVEL2 = 40;
+    private static final double LEVEL2_SPEED = 1.5;   // м'яч швидший у 1.5 раза
+
+    /** Рухома перешкода */
+    private static final int OBSTACLE_WIDTH = 100;
+    private static final int OBSTACLE_HEIGHT = 12;
+    private static final int OBSTACLE_Y = 260;
+    private static final double OBSTACLE_SPEED = 2;
+
     /** Пауза між кроками м'яча в мілісекундах (менше = швидша гра) */
     private static final int PAUSE_TIME = 10;
 
-    /** Очки за одну цеглину та поріг для 2-го рівня */
+    /** Очки за одну цеглину та поріг для переходу на 2-й рівень */
     private static final int BRICK_POINTS = 10;
     private static final int LEVEL_2_MIN_SCORE = 50;
 
@@ -105,6 +115,16 @@ public class breakout extends GraphicsProgram {
     /** Поточна кількість очок */
     private int score = 0;
 
+    /** Поточний рівень, життя, коефіцієнт швидкості та ширина ракетки */
+    private int level = 1;
+    private int lives = NTURNS;
+    private double speedFactor = 1.0;
+    private int paddleWidth = PADDLE_WIDTH;
+
+    /** Рухома перешкода та її швидкість */
+    private GRect obstacle;
+    private double obstacleVx;
+
     /** Швидкість м'яча: зміна позиції за один крок */
     private double vx, vy;
 
@@ -145,7 +165,13 @@ public class breakout extends GraphicsProgram {
         setupHearts();
         setupBricks();
         setupPaddle();
-        playGame();
+
+        playLevel();                 // 1-й рівень
+        if (lives > 0) {             // набрано 50 очок і ще є життя, переходимо далі
+            startLevel2();
+            playLevel();             // 2-й рівень
+        }
+        finishGame();
     }
 
     /** Стартова сторінка: назва гри, правила і кнопка "Почати". Чекає, поки натиснуть кнопку. */
@@ -171,13 +197,13 @@ public class breakout extends GraphicsProgram {
             add(decor);
         }
 
-        // правила гри та умова переходу на 2-й рівень
+        // правила гри
         addCenteredText("Рухайте мишею ракетку", 240, "SansSerif-15", Color.WHITE);
         addCenteredText("Не дайте м'ячу впасти. У вас " + NTURNS + " життя", 265, "SansSerif-15", Color.WHITE);
         addCenteredText("1 цеглина = " + BRICK_POINTS + " очок (усього 100 цеглин)", 295, "SansSerif-bold-15", Color.YELLOW);
-        addCenteredText("Поки не наберете " + LEVEL_2_MIN_SCORE + " очок,", 325, "SansSerif-15", new Color(100, 255, 180));
-        addCenteredText("на 2-й рівень не переходите", 347, "SansSerif-15", new Color(100, 255, 180));
-        addCenteredText("(2-го рівня поки що немає)", 372, "SansSerif-14", Color.LIGHT_GRAY);
+        addCenteredText("Набери " + LEVEL_2_MIN_SCORE + " очок і перейдеш на 2-й рівень", 325, "SansSerif-15", new Color(100, 255, 180));
+        addCenteredText("2-й рівень: швидший м'яч, менша ракетка", 347, "SansSerif-15", Color.LIGHT_GRAY);
+        addCenteredText("і рухома перешкода!", 372, "SansSerif-15", Color.LIGHT_GRAY);
 
         // кнопка "Почати"
         GRect button = new GRect(START_W, START_H);
@@ -295,10 +321,10 @@ public class breakout extends GraphicsProgram {
 
     /** Створює ракетку внизу по центру. */
     private void setupPaddle() {
-        int x = (WIDTH - PADDLE_WIDTH) / 2;
+        int x = (WIDTH - paddleWidth) / 2;
         int y = HEIGHT - PADDLE_Y_OFFSET - PADDLE_HEIGHT;
 
-        paddle = new GRect(x, y, PADDLE_WIDTH, PADDLE_HEIGHT);
+        paddle = new GRect(x, y, paddleWidth, PADDLE_HEIGHT);
         paddle.setFilled(true);
         add(paddle);
     }
@@ -311,14 +337,14 @@ public class breakout extends GraphicsProgram {
         }
 
         // ракетка центрується по курсору
-        int x = e.getX() - PADDLE_WIDTH / 2;
+        int x = e.getX() - paddleWidth / 2;
 
         // не виходимо за ліву і праву стінки
         if (x < 0) {
             x = 0;
         }
-        if (x > WIDTH - PADDLE_WIDTH) {
-            x = WIDTH - PADDLE_WIDTH;
+        if (x > WIDTH - paddleWidth) {
+            x = WIDTH - paddleWidth;
         }
 
         paddle.setLocation(x, paddle.getY());
@@ -334,35 +360,41 @@ public class breakout extends GraphicsProgram {
         ball.setFilled(true);
         add(ball);
 
-        // м'яч летить вниз
-        vy = 3.0;
+        // м'яч летить вниз, швидкість залежить від рівня
+        vy = 3.0 * speedFactor;
 
         // vx випадкове від 1.0 до 3.0, а потім випадково вліво або вправо
-        vx = rgen.nextDouble(1.0, 3.0);
+        vx = rgen.nextDouble(1.0, 3.0) * speedFactor;
         if (rgen.nextBoolean(0.5)) {
             vx = -vx;
         }
     }
 
-    /** Уся гра: життя, м'ячі, перемога або програш. */
-    private void playGame() {
-        int lives = NTURNS;
+    /** Чи завершено поточний рівень: 1-й за очками, 2-й коли збито всі цеглини. */
+    private boolean levelDone() {
+        if (level == 1) {
+            return score >= LEVEL_2_MIN_SCORE;
+        }
+        return bricksLeft == 0;
+    }
 
-        // грає, поки є життя і є цеглини
-        while (lives > 0 && bricksLeft > 0) {
+    /** Один рівень: грає, поки є життя і рівень не завершено. */
+    private void playLevel() {
+        while (lives > 0 && !levelDone()) {
             setupBall();
             pause(1000); // час приготуватись
 
             // цикл одного м'яча: поки він не впав на нижню стінку
-            while (bricksLeft > 0 && ball.getY() + 2 * BALL_RADIUS < HEIGHT) {
+            while (!levelDone() && ball.getY() + 2 * BALL_RADIUS < HEIGHT) {
                 moveBall();
+                moveObstacle();
                 pause(PAUSE_TIME);
             }
 
             remove(ball);
 
-            // життя втрачається, тільки якщо цеглини ще є
-            if (bricksLeft > 0) {
+            // життя втрачається, тільки якщо рівень ще не завершено
+            if (!levelDone()) {
                 lives--;
 
                 // прибираємо одне сердечко з екрана
@@ -378,22 +410,87 @@ public class breakout extends GraphicsProgram {
                 }
             }
         }
+    }
 
-        // зупиняємо фонову музику в кінці гри
+    /** Готує 2-й рівень: швидший м'яч, менша ракетка, нові цеглини і перешкода. */
+    private void startLevel2() {
+        level = 2;
+        speedFactor = LEVEL2_SPEED;
+        paddleWidth = PADDLE_WIDTH_LEVEL2;
+
+        clearBricks();
+        remove(paddle);
+        setupPaddle();
+        setupBricks();
+        setupObstacle();
+
+        GLabel title = new GLabel("РІВЕНЬ 2");
+        title.setFont("SansSerif-bold-40");
+        title.setColor(new Color(30, 30, 60));
+        add(title, (WIDTH - title.getWidth()) / 2, 340);
+
+        GLabel hint = new GLabel("Швидший м'яч, менша ракетка, рухома перешкода");
+        hint.setFont("SansSerif-16");
+        hint.setColor(Color.DARK_GRAY);
+        add(hint, (WIDTH - hint.getWidth()) / 2, 370);
+
+        pause(2500);
+        remove(title);
+        remove(hint);
+    }
+
+    /** Прибирає всі цеглини, що залишились з 1-го рівня (шукає їх за координатами сітки). */
+    private void clearBricks() {
+        int rowWidth = NBRICKS_PER_ROW * BRICK_WIDTH + (NBRICKS_PER_ROW - 1) * BRICK_SEP;
+        int startX = (WIDTH - rowWidth) / 2;
+
+        for (int row = 0; row < NBRICK_ROWS; row++) {
+            for (int col = 0; col < NBRICKS_PER_ROW; col++) {
+                double x = startX + col * (BRICK_WIDTH + BRICK_SEP) + BRICK_WIDTH / 2.0;
+                double y = BRICK_Y_OFFSET + row * (BRICK_HEIGHT + BRICK_SEP) + BRICK_HEIGHT / 2.0;
+                GObject brick = getElementAt(x, y);
+                if (brick != null) {
+                    remove(brick);
+                }
+            }
+        }
+        bricksLeft = 0;
+    }
+
+    /** Створює сіру рухому перешкоду посередині поля. */
+    private void setupObstacle() {
+        obstacle = new GRect((WIDTH - OBSTACLE_WIDTH) / 2, OBSTACLE_Y, OBSTACLE_WIDTH, OBSTACLE_HEIGHT);
+        obstacle.setFilled(true);
+        obstacle.setColor(Color.DARK_GRAY);
+        add(obstacle);
+        obstacleVx = OBSTACLE_SPEED;
+    }
+
+    /** Рухає перешкоду вліво-вправо і розвертає її біля стінок. */
+    private void moveObstacle() {
+        if (obstacle == null) {
+            return;
+        }
+
+        obstacle.move(obstacleVx, 0);
+
+        if (obstacle.getX() <= 0 || obstacle.getX() + OBSTACLE_WIDTH >= WIDTH) {
+            obstacleVx = -obstacleVx;
+        }
+    }
+
+    /** Кінець гри: перемога або програш. */
+    private void finishGame() {
         stopBgMusic();
 
         if (bricksLeft == 0) {
             playSound(win);
             addCenteredText("YOU WIN! Очки: " + score, HEIGHT / 2.0, "SansSerif-bold-22", new Color(0, 150, 80));
-            addCenteredText("2-го рівня поки що немає", HEIGHT / 2.0 + 30, "SansSerif-16", Color.DARK_GRAY);
-        } else if (score >= LEVEL_2_MIN_SCORE) {
-            playSound(loseClip);
-            addCenteredText("GAME OVER! Очки: " + score, HEIGHT / 2.0, "SansSerif-bold-22", Color.RED);
-            addCenteredText("50+ очок набрано, але 2-го рівня поки немає", HEIGHT / 2.0 + 30, "SansSerif-15", Color.DARK_GRAY);
+            addCenteredText("Ти пройшов обидва рівні!", HEIGHT / 2.0 + 30, "SansSerif-16", Color.DARK_GRAY);
         } else {
             playSound(loseClip);
-            addCenteredText("GAME OVER! Очки: " + score + " / " + LEVEL_2_MIN_SCORE, HEIGHT / 2.0, "SansSerif-bold-20", Color.RED);
-            addCenteredText("Не вистачило очок для 2-го рівня", HEIGHT / 2.0 + 30, "SansSerif-16", Color.DARK_GRAY);
+            addCenteredText("GAME OVER! Очки: " + score, HEIGHT / 2.0, "SansSerif-bold-22", Color.RED);
+            addCenteredText("Ти дійшов до рівня " + level, HEIGHT / 2.0 + 30, "SansSerif-16", Color.DARK_GRAY);
         }
     }
 
@@ -416,7 +513,7 @@ public class breakout extends GraphicsProgram {
             vy = -vy;
         }
 
-        // нижню стінку тут не перевіряємо: її обробляє playGame (м'яч втрачено)
+        // нижню стінку тут не перевіряємо: її обробляє playLevel (м'яч втрачено)
 
         // перевіряємо, чи м'яч у щось влучив
         GObject collider = getCollidingObject();
@@ -431,6 +528,14 @@ public class breakout extends GraphicsProgram {
 
             // відбиваємо вгору; abs не дає м'ячу "приклеїтися" до ракетки
             vy = -Math.abs(vy);
+        } else if (collider != null && collider == obstacle) {
+            // виставляємо м'яч з того боку, з якого він прилетів, щоб не застряг
+            if (vy > 0) {
+                ball.setLocation(ball.getX(), obstacle.getY() - 2 * BALL_RADIUS);
+            } else {
+                ball.setLocation(ball.getX(), obstacle.getY() + OBSTACLE_HEIGHT);
+            }
+            vy = -vy;
         } else if (collider != null
                 && collider != heart1 && collider != heart2 && collider != heart3
                 && collider != coinIcon && collider != scoreLabel) {
