@@ -80,6 +80,15 @@ public class breakout extends GraphicsProgram {
     private static final int LEVEL_2_MIN_SCORE = 50;
     private static final int LEVEL_3_MIN_SCORE = 100;
 
+    /** Скільки очків потрібно набрати, щоб перемогти (на 3-му рівні) */
+    private static final int WIN_SCORE = 150;
+
+    /** Кнопка "почати спочатку" на екрані перемоги / поразки */
+    private static final int RESTART_W = 220;
+    private static final int RESTART_H = 50;
+    private static final int RESTART_X = (WIDTH - RESTART_W) / 2;
+    private static final int RESTART_Y = 390;
+
     /** Кнопка "Почати" на стартовій сторінці */
     private static final int START_W = 160;
     private static final int START_H = 45;
@@ -152,6 +161,10 @@ public class breakout extends GraphicsProgram {
     /** Чи натиснули кнопку "Почати" */
     private boolean gameStarted = false;
 
+    /** Чи показаний кінцевий екран і чи натиснули кнопку "почати спочатку" */
+    private boolean waitingRestart = false;
+    private boolean restartRequested = false;
+
     /** Генератор випадкових чисел */
     private RandomGenerator rgen = RandomGenerator.getInstance();
 
@@ -179,6 +192,16 @@ public class breakout extends GraphicsProgram {
 
         addMouseListeners();
         showStartScreen();
+
+        // гра йде по колу: після кінцевого екрана кнопка починає все спочатку
+        while (true) {
+            playGameSession();
+            resetGame();
+        }
+    }
+
+    /** Одна повна гра: 3 рівні, а в кінці екран перемоги або поразки. */
+    private void playGameSession() {
         startBgMusic();
         setupScore();
         setupHearts();
@@ -195,6 +218,29 @@ public class breakout extends GraphicsProgram {
             playLevel();             // 3-й рівень
         }
         finishGame();
+    }
+
+    /** Скидає все до початкового стану для нової гри. */
+    private void resetGame() {
+        removeAll();
+
+        score = 0;
+        level = 1;
+        lives = NTURNS;
+        speedFactor = 1.0;
+        paddleWidth = PADDLE_WIDTH;
+        bricksLeft = 0;
+
+        paddle = null;
+        ball = null;
+        bonus = null;
+        obstacle = null;
+        heart1 = null;
+        heart2 = null;
+        heart3 = null;
+
+        waitingRestart = false;
+        restartRequested = false;
     }
 
     /** Стартова сторінка: назва гри, правила і кнопка "Почати". Чекає, поки натиснуть кнопку. */
@@ -298,6 +344,13 @@ public class breakout extends GraphicsProgram {
                 && e.getY() >= START_Y && e.getY() <= START_Y + START_H) {
             gameStarted = true;
         }
+
+        // кнопка "почати спочатку" на кінцевому екрані
+        if (waitingRestart
+                && e.getX() >= RESTART_X && e.getX() <= RESTART_X + RESTART_W
+                && e.getY() >= RESTART_Y && e.getY() <= RESTART_Y + RESTART_H) {
+            restartRequested = true;
+        }
     }
 
     /** Колір цеглини залежить від номера ряду (по два ряди кожного кольору). */
@@ -398,7 +451,7 @@ public class breakout extends GraphicsProgram {
         }
     }
 
-    /** Чи завершено поточний рівень: 1-й і 2-й за очками, 3-й коли збито всі цеглини. */
+    /** Чи завершено поточний рівень: 1-й, 2-й і 3-й за очками (на 3-му це перемога). */
     private boolean levelDone() {
         if (level == 1) {
             return score >= LEVEL_2_MIN_SCORE;
@@ -406,7 +459,7 @@ public class breakout extends GraphicsProgram {
         if (level == 2) {
             return score >= LEVEL_3_MIN_SCORE;
         }
-        return bricksLeft == 0;
+        return score >= WIN_SCORE;
     }
 
     /** Один рівень: грає, поки є життя і рівень не завершено. */
@@ -669,18 +722,51 @@ public class breakout extends GraphicsProgram {
         }
     }
 
-    /** Кінець гри: перемога або програш. */
+    /** Кінець гри: напівпрозорий екран перемоги або поразки з кнопкою "почати спочатку". */
     private void finishGame() {
         stopBgMusic();
 
-        if (lives > 0) {
+        boolean won = lives > 0;
+
+        // напівпрозорий фон поверх гри (четвертий параметр кольору = прозорість 0..255)
+        GRect overlay = new GRect(WIDTH, HEIGHT);
+        overlay.setFilled(true);
+        if (won) {
+            overlay.setColor(new Color(0, 70, 30, 200));
+        } else {
+            overlay.setColor(new Color(0, 0, 0, 200));
+        }
+        add(overlay, 0, 0);
+
+        String buttonCaption;
+        if (won) {
             playSound(win);
-            addCenteredText("YOU WIN! Очки: " + score, HEIGHT / 2.0, "SansSerif-bold-22", new Color(0, 150, 80));
-            addCenteredText("Ти пройшов усі три рівні!", HEIGHT / 2.0 + 30, "SansSerif-16", Color.DARK_GRAY);
+            addCenteredText("ВІТАЄМО З ПЕРЕМОГОЮ!", 280, "SansSerif-bold-36", new Color(120, 255, 160));
+            addCenteredText("Ви набрали " + score + " очків", 330, "SansSerif-bold-24", Color.WHITE);
+            buttonCaption = "Грати з початку";
         } else {
             playSound(loseClip);
-            addCenteredText("GAME OVER! Очки: " + score, HEIGHT / 2.0, "SansSerif-bold-22", Color.RED);
-            addCenteredText("Ти дійшов до рівня " + level, HEIGHT / 2.0 + 30, "SansSerif-16", Color.DARK_GRAY);
+            addCenteredText("GAME OVER", 280, "SansSerif-bold-48", new Color(255, 80, 80));
+            addCenteredText("Зароблено очків: " + score, 330, "SansSerif-bold-24", Color.WHITE);
+            buttonCaption = "Почати спочатку";
+        }
+
+        // кнопка
+        GRect button = new GRect(RESTART_W, RESTART_H);
+        button.setFilled(true);
+        button.setColor(new Color(0, 200, 120));
+        add(button, RESTART_X, RESTART_Y);
+
+        GLabel buttonText = new GLabel(buttonCaption);
+        buttonText.setFont("SansSerif-bold-22");
+        buttonText.setColor(Color.WHITE);
+        add(buttonText, RESTART_X + (RESTART_W - buttonText.getWidth()) / 2,
+                RESTART_Y + (RESTART_H + buttonText.getAscent()) / 2 - 3);
+
+        // чекаємо, поки гравець натисне кнопку
+        waitingRestart = true;
+        while (!restartRequested) {
+            pause(50);
         }
     }
 
