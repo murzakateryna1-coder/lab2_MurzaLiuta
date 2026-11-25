@@ -101,10 +101,10 @@ public class breakout extends GraphicsProgram {
     /** Мінімальна кількість очок для переходу на 2-й рівень */
     private static final int LEVEL_2_MIN_SCORE = 50;
     /** Мінімальна кількість очок для переходу на 3-й рівень */
-    private static final int LEVEL_3_MIN_SCORE = 100;
+    private static final int LEVEL_3_MIN_SCORE = 120;
 
     /** Кількість очок, необхідна для перемоги у грі */
-    private static final int WIN_SCORE = 150;
+    private static final int WIN_SCORE = 220;
 
     /** Ширина кнопки перезапуску гри */
     private static final int RESTART_W = 220;
